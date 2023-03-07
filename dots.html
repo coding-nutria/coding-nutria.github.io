@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"> 
+<style>
+*{
+    margin:0px;
+	padding:0px;
+	overflow:hidden;
+}
+html,body{
+    width:100%;
+	height:100%;
+}
+#canvas{
+    width:800px;
+	height:800px;
+	display:block;
+	position:absolute;
+	left:50%;
+	top:50%;
+	margin-top:-400px;
+	margin-left:-400px;
+	border:1px black solid;
+}
+</style>
+</head>
+<body>
+<canvas id="canvas" width = 800 height=800></canvas>
+</body>
+</html>
+<script>
+var defaultFactions  = ['grey','green','red','blue','purple','yellow'];
+var debugSettings = {
+	maxFactions:4,
+	nodes:5,
+	isolation:0,
+	citySpace:70,
+	maxRoadsPerCity:3,
+	roadMaxLength:1000,
+	debug:true
+}
+var normalSettings={
+	maxFactions:4,
+	nodes:40,
+	isolation:4,
+	citySpace:70,
+	maxRoadsPerCity:3,
+	roadMaxLength:130,
+	debug:false
+}
+var connectionTest={
+	maxFactions:2,
+	nodes:2,
+	isolation:0,
+	citySpace:100,
+	maxRoadsPerCity:1,
+	roadMaxLength:150,
+	debug:true
+}
+var settings = normalSettings;</script>
+<script>
+function distance2(entity1,entity2){
+	return (entity1.x-entity2.x)*(entity1.x-entity2.x)+(entity1.y-entity2.y)*(entity1.y-entity2.y);
+}
+function iRandom(max){
+	return Math.floor(Math.random()*max);
+}</script>
+<script>
+function clearMap(){
+	entities=[];
+	connections=[];
+}
+function generateRandom(threshold,amount){
+	threshold*=threshold;
+	for(var i=0;i<amount;i++){	
+		var e=null;		
+		while(e==null){
+			e = new Entity(100+iRandom(600),100+iRandom(600));
+			for(var j=0;j<entities.length;j++){
+				if(distance2(e,entities[j])<threshold){
+					e=null;
+					break;
+				}
+			}			
+		}
+		new Node(e.x,e.y,20);
+	}
+}
+function connectClosest(threshold,range){
+	var connections=0;
+	for(var i=0;i<entities.length;i++){
+		connections=0;
+		currentRange=range*range;
+		while(connections==0){
+			for(var j=0;j<entities.length;j++){
+				if(i!=j && connections<threshold && distance2(entities[i],entities[j])<currentRange){
+					entities[i].connect(entities[j]);		
+					connections++;
+				}
+			}
+			currentRange+=50;
+		}
+	}
+}
+function isCoherent(){
+	var connections=0;
+	var result=new Array(entities.length);
+	function mark(e){		
+		if(result[entities.indexOf(e)]!=1){
+			result[entities.indexOf(e)]=1;
+			connections++;
+			for(var key in e.roads){
+				mark(e.roads[key].other(e));
+			}
+		}
+	}
+	mark(entities[0]);
+	if(connections==entities.length){
+		return true;
+	}else{
+		return false;
+	}
+}
+function generateCoherent(threshold,amount,connectThreshold,range){
+	clearMap();
+	generateRandom(threshold,amount);	
+	connectClosest(connectThreshold,range);
+	while(!isCoherent()){
+		console.log('bad map was created, another attempt');
+		clearMap();
+		generateRandom(threshold,amount);	
+		connectClosest(connectThreshold,range);
+	}
+}
+function clearFactions(faction){
+	for(var i=0;i<entities.length;i++){
+		entities[i].faction=faction;
+	}
+}
+
+function captureOneForFactionWithIsolation(space){
+	clearFactions(-1);
+	var captured=0;
+	function isolation(e,jumps){
+		if(jumps>0){
+			for(var index in e.roads){
+				var el=e.roads[index].other(e);
+				if(el.faction<1){
+					if(el.faction==-1)
+						captured++;
+					el.faction=0;
+					isolation(el,jumps-1);
+				}
+			}
+		}
+	}	
+	for(var i=1;i<factions.length;i++){		
+		if(captured>=entities.length){
+			console.log("Map filled too soon, removing "+(factions.length-i)+" factions");
+			while(i<factions.length){
+				factions.splice(i,1);
+			}
+			break;
+		}
+		var target=iRandom(entities.length);
+		while(entities[target].faction!=-1){
+			target=(target+1)%entities.length;
+		}
+		captured++;
+		entities[target].faction=i;	
+		isolation(entities[target],space);
+	}
+	for(var i=0;i<entities.length;i++){
+		if(entities[i].faction==-1)
+			entities[i].faction=0;
+	}
+}
+function createMap(){
+	generateCoherent(settings.citySpace,settings.nodes,settings.maxRoadsPerCity,settings.roadMaxLength);
+	captureOneForFactionWithIsolation(settings.isolation);
+}</script>
+<script>
+var width=800,
+	height=800;
+function clear(){
+	ctx.clearRect ( 0 , 0 , width, height );
+} 
+function drawCircle(x,y,r){
+	ctx.beginPath();
+	ctx.arc(x, height-y, r, 0, 2 * Math.PI, false);    
+    ctx.fill();
+	ctx.stroke();
+}
+function drawCapture(x,y,r,progress){
+	ctx.beginPath();
+	ctx.arc(x, height-y, r, 0, 2 * Math.PI*progress, false);    
+	ctx.lineTo(x,height-y);
+    ctx.fill();
+	ctx.stroke();
+}
+function drawLine(x1,y1,x2,y2){
+	ctx.beginPath();
+	ctx.moveTo(x1,height-y1);
+	ctx.lineTo(x2,height-y2);
+	ctx.stroke();
+}
+function putPixel(x,y){
+	ctx.fillRect( x, height-y, 1, 1 );
+}
+function drawText(text,x,y){
+	ctx.fillText(text, x, height-y);
+}
+function setColor(color){
+	ctx.fillStyle = color;
+	ctx.strokeStyle = color;
+}
+function setFill(color){
+	ctx.fillStyle = color;
+}
+function setStroke(color){
+	ctx.strokeStyle = color;
+}
+function lineWidth(width){
+	ctx.lineWidth=width;
+}
+function drawConnection(c){
+	lineWidth(5);
+	setColor(c.relation());				
+	drawLine(c.node1.x,c.node1.y,c.node2.x,c.node2.y);
+	var dx=(c.node2.x-c.node1.x)/c.length;
+	var dy=(c.node2.y-c.node1.y)/c.length;
+	lineWidth(1);
+	for(var i=0;i<c.length;i++){
+		var color = c.getSegmentColor(i);
+		if (typeof color != 'undefined'){
+			setColor(color);
+			drawCircle(c.node1.x+dx*i,c.node1.y+dy*i,3);
+		}
+	}
+}
+function intenseTextShadow(text,x,y){
+	var shadow = 10; // const
+	for(var i=shadow;i>0;i--){		
+		ctx.shadowBlur = i;
+		drawText(text,x,y);
+	}
+	ctx.shadowBlur=0;
+}
+function drawInfoBlock(e){
+	ctx.shadowColor = 'white';
+	ctx.textAlign='center';
+	ctx.textBaseline = 'top';
+	ctx.fontSize=10;
+	var fontsize = 10;
+	var sides = 0;
+	for(var i=1;i<factions.length;i++){
+		if(e.military[i].length!=0){
+			sides++;
+		}		
+	}
+	if(sides==0 && e.faction!=0){
+		setFill(factions[e.faction]);
+		intenseTextShadow('0',e.x,e.y);
+	}else{
+		var offsetTop = sides*fontsize/2;
+		sides=0;
+		for(var i=1;i<factions.length;i++){
+			if(e.military[i].length!=0){
+				var currentOffsetTop = offsetTop-(sides)*fontsize;
+				setFill(factions[i]);
+				intenseTextShadow(e.military[i].length,e.x,e.y+currentOffsetTop);
+				sides++;
+			}
+		}
+	}
+}
+function drawMilitaryInfo(e){
+	if(e.faction==myFaction || e.attacker == myFaction || settings.debug){	
+		drawInfoBlock(e);
+	}		
+}
+function drawEntity(e){
+	setFill(factions[e.faction]);	
+	setStroke(factions[e.faction]);
+	lineWidth(1);
+	if(e.index==current){
+		setStroke('orange');
+		lineWidth(3);
+	}
+	drawCircle(e.x,e.y,e.r);
+	if(e.attacker!=-1){
+		setFill(factions[e.attacker]);
+		drawCapture(e.x,e.y,e.r,e.captured/e.ticksToCapture);
+	}
+	drawMilitaryInfo(e);		
+}
+function drawAll(){
+	clear();	
+	for(var i=0;i<connections.length;i++){
+		drawConnection(connections[i]);
+	}
+	for(var i=0;i<entities.length;i++){
+		drawEntity(entities[i]);
+	}
+}</script>
+<script>
+function entityClicked(e,continuos){
+	if(typeof current !== 'number')
+		console.log('Bad value for currently selected node '+current);
+	if(current==-1){	
+		if(e.attacker!=-1 || e.faction==0)
+			return;
+		if(myFaction==e.faction){
+			// only own nodes are available for selection and control			
+			current=e.index;
+		}
+		return;
+	}else{
+		if(current==e.index){
+			// second click unselects node
+			current=-1;
+			return
+		}else{
+			// some node clicked while node selected, attempting to send army
+			for(var ind in entities[current].roads){			
+				if(entities[current].roads[ind].other(entities[current])===e){
+					if(continuos){
+						entities[current].transfer=ind;
+					}else{
+						entities[current].transfer=-1;
+					}
+					sendSoldiers(entities[current].roads[ind],e);
+					current=-1;
+					return;
+				}
+			}
+			// node was not connected with current node, unselecting current node
+			current=-1;
+			return;
+		}
+	}
+	// no node was clicked,keep the selection	
+}
+function mouseClicked(x,y,continuos){
+	for(var i=0;i<entities.length;i++){
+		if(entities[i].clicked(x,y)){
+			entityClicked(entities[i],continuos);
+			return;
+		}
+	}
+	console.log('miss');
+	//nothing clicked
+}</script>
+<script>
+function gameTick(){
+	drawAll();
+	var redrawsPerGameTick = 2;
+	if(counter%redrawsPerGameTick==0){
+		for(var i=0;i<entities.length;i++){
+			entities[i].gameTick();
+		}
+		if(counter%3==0)
+		for(var i=0;i<connections.length;i++){
+			connections[i].gameTick();
+		}
+		for(var i=0;i<bots.length;i++){
+			bots[i].turn();
+		}
+	}
+	counter++;
+}
+var mainInterval;
+function loadGame(){
+	factions=[];
+	for(var i=0;i<=settings.maxFactions;i++){
+		factions.push(defaultFactions[i]);
+	}
+	createMap();
+	checkRoads();
+	checkEntityIndexes();
+	current=-1;
+	myFaction=0;
+	canvas.addEventListener('click', function(event){
+		var x= event.pageX-sx;
+		var y = sy-event.pageY;
+		mouseClicked(x,y,(event.altKey && current!=-1));
+	});	
+	myFaction=1;
+	worldOfAI();
+}
+function beginGame(){
+	counter=0;
+	mainInterval = setInterval(gameTick,17);
+	drawAll();
+}
+function stopGame(){
+	clearInterval(mainInterval);
+}</script>
+<script>
+function sendSoldiers(connection,dest){
+	if(connection.other(dest).atWar())
+		return;		
+	var source = connection.other(dest);
+	var barracks = source.military[source.faction];
+	while(barracks.length>1){
+		connection.send(barracks.pop(),dest);
+	}
+}</script>
+<script>
+function Entity(x,y){
+	this.x=x;
+	this.y=y;
+}</script>
+<script>
+function Node(x,y,r){
+	this.x=x;
+	this.y=y;
+	this.r=r;
+	this.roads=[];
+	this.faction=0;
+	this.military=new Array(factions.length);
+	for(var i=0;i<this.military.length;i++){
+		this.military[i]=[];
+	}
+	this.attacker=-1;
+	this.captured=0;
+	this.clicked = function(x,y){
+		return (this.x-x)*(this.x-x)+(this.y-y)*(this.y-y)<=r*r;
+	}
+	this.transfer=-1;
+	this.connect = function(node){
+		if(this==node || this.connectedWith(node))
+			return;
+		var connection = new Connection(this,node,connections.length);		
+		connections.push(connection);
+		node.roads.push(connection);
+		this.roads.push(connection);
+	}
+	this.connectedWith = function(node){
+		for(var i=0;i<this.roads.length;i++){
+			if(node==this.roads[i].other(this)){
+				return true;
+			}
+		}
+		return false;
+	}
+	this.capture = function(faction){
+		this.faction=faction;
+	}
+	this.spawn=function(){
+		var spawnTimeout = 30;// debug normal = 120
+		if(counter%spawnTimeout==0){
+			this.military[this.faction].push(new Soldier(this.faction));
+		}
+	}
+	this.ticksToCapture = 60;
+	this.atWar = function(){
+		if(this.attacker!=-1)
+			return true;
+		var sides=0;
+		for(var i=1;i<this.military.length;i++){
+			if(this.military[i].length>0){
+				if(sides>0){
+					return true;
+				}else{
+					sides++;
+				}
+			}
+		}
+		return false;
+	}
+	this.gameTick=function(){
+		var sides=[];
+		var totalUnits=0;
+		for(var i=0;i<this.military.length;i++){
+			if(this.military[i].length>0){
+				sides.push(this.military[i]);
+				totalUnits+=this.military[i].length;
+			}
+		}
+		if(this.transfer!=-1 && this.faction==myFaction && this.military[this.faction].length>10){
+			sendSoldiers(this.roads[this.transfer],this.roads[this.transfer].other(this));
+		}
+		if(sides.length==0){
+			if(this.faction==0){
+				// 100% neural				
+			}else{
+				// no units on captured base
+				this.spawn();
+				if(this.attacker>0){
+					if(this.captured<=0){
+						this.attacker=-1;
+					}else{
+						this.captured--;
+					}
+				}
+			}
+			return;
+		}
+		if(sides.length==1){
+			var side = sides[0];
+			var sideFaction=this.military.indexOf(side);
+			if(this.faction==0){
+				// peaceful capture
+				if(this.attacker==sideFaction){
+					this.captured++;
+					if(this.captured>=this.ticksToCapture){
+						this.faction=sideFaction;
+						this.captured=0;
+						this.attacker=-1;
+					}
+				}else{					
+					if(this.captured<=0){
+						this.attacker=sideFaction;
+						if(this.index==current)
+							current=-1;
+					}else{
+						this.captured--;
+					}
+				}
+			}else{
+				// either capture on non-neutral base or weird non-neutral base with no units(probably first game tick)
+				if(this.faction!=sideFaction){
+					if(this.attacker==sideFaction){
+						this.captured++;
+						if(this.captured>=this.ticksToCapture){
+							this.faction=sideFaction;
+							this.captured=0;
+							this.attacker=-1;
+						}
+					}else{
+						if(this.captured<=0){
+							this.attacker=sideFaction;							
+							if(this.index==current)
+								current=-1;
+						}else{
+							this.captured--;
+						}
+					}				
+				}else{
+					// units on their own base. spawn					
+					this.spawn();
+					if(this.attacker>0){
+						if(this.captured<=0){
+							this.attacker=-1;
+						}else{
+							this.captured--;
+						}
+					}
+				}
+				return;
+			}
+			return;
+		}
+		if(sides.length>1){
+			/* first war implementation
+			for(var i=0;i<sides.length;i++){
+				var enemyCount = totalUnits-sides[i].length;
+				var fallen=[];
+				for(var j=0;j<sides[i].length && enemyCount>0;j++){
+					var ind = iRandom(enemyCount);
+					var victim = 0;
+					while(sides[victim].length<=ind || victim==i){
+						if(victim!=i){
+							ind-=sides[victim].length;							
+						}
+						victim++;
+						if(victim>=sides.length){
+							alert('Fight for node went overhead '+ind);
+						}
+					}
+					var fight = sides[i][j].fight(sides[victim][ind]);
+					if(fight == 1){
+						sides[victim].splice(ind,1);
+						enemyCount--;
+						totalUnits--;
+					}else if(fight==-1){
+						fallen.push(sides[i][j]);
+					}
+				}
+				for(var j=0;j<fallen.length;j++){
+					sides[i].splice(sides[i].indexOf(fallen[j]),1);
+					totalUnits--;					
+				}
+			}*/
+			// second war implementation
+			for(var i=0;i<sides.length;i++){				
+				var power = 0;
+				for(var j=0;j<sides[i].length;j++){
+					power+=sides[i][j].swing();
+				}
+				var tooBigArmyPenalty = 0.15;// 10 to 100 fix 
+				if(sides[i].length>10){
+					if(sides[i].length>100){
+						power*=1-tooBigArmyPenalty;
+					}else{
+						power*=1-(i-10)/90*tooBigArmyPenalty;
+					}
+				}
+				var enemyCount = totalUnits-sides[i].length;				
+				var fallen=[];				
+				var counterPower = 0;
+				while(power>0 && enemyCount>0){
+					var ind = iRandom(enemyCount);
+					var victim = 0;
+					while(sides[victim].length<=ind || victim==i){
+						if(victim!=i){
+							ind-=sides[victim].length;							
+						}
+						victim++;
+						if(victim>=sides.length){
+							alert('Fight for node went overhead '+ind);
+						}
+					}
+					var hit = iRandom(100)+1;
+					if(hit>power)
+						hit=power;
+					var counterAttack = sides[victim][ind].swing();
+					if(sides[victim][ind].takeHit(hit)){
+						counterPower+=counterAttack/2;
+						sides[victim].splice(ind,1);
+						enemyCount--;
+						totalUnits--;
+					}else{
+						counterPower+=counterAttack;
+					}
+					power-=hit;
+				}
+				while(counterPower>0 && sides[i].length>0){
+					var victim = iRandom(sides[i].length);
+					var hit = iRandom(100);
+					if(hit>counterPower)
+						hit = counterPower;
+					if(sides[i][victim].takeHit(hit)){
+						sides[i].splice(victim,1);
+						totalUnits--;
+					}
+					counterPower-=hit;
+				}
+			}
+		}
+	}
+	this.index=entities.length;
+	entities.push(this);
+}</script>
+<script>
+function Connection(node1,node2,index){
+	this.length=20; //const;
+	this.node1=node1;
+	this.node2=node2;
+	this.index=index;
+	this.segments=new Array(this.length);
+	this.mode=0;
+	this.setMode = function(mode,e){
+		console.log('setMode '+mode);
+		mode=(mode)?1:0;
+		if(this.node2==e){
+			this.mode=mode;
+		}else{
+			this.mode=-mode;
+		}
+	}
+	for(var i=0;i<this.segments.length;i++){
+		this.segments[i]={
+			right:[],
+			left:[]
+		}
+	}
+	this.other = function(node){
+		if(node1==node){
+			return node2
+		}else{
+			return node1;
+		}
+	}
+	this.relation = function(){		
+		if(node1.faction*node2.faction==0){
+			return '#444444';
+		}else if(node1.faction!=node2.faction){
+			return '#FF7777';
+		}else{
+			return '#77FF77';
+		}
+	}
+	this.getSegmentColor = function(index){
+		if(this.segments[index].right.length!=0){
+			return factions[this.segments[index].right[0].faction];
+		}else if(this.segments[index].left.length!=0) {
+			return factions[this.segments[index].left[0].faction];
+		}
+		return undefined;
+	}
+	this.send = function (soldier,destination){
+		if(this.node2==destination){
+			this.segments[0].right.push(soldier);
+		}else{
+			this.segments[this.length-1].left.push(soldier);
+		}
+	}	
+	this.gameTick = function(){
+		function checkSkirmish(segment){			
+			if(segment.right.length!=0){
+				var faction = segment.right[0].faction;
+				for(var j=1;j<segment.right.length;j++){
+					if(faction!=segment.right[j].faction){
+						return true;
+					}
+				}
+				for(var j=0;j<segment.left.length;j++){
+					if(faction!=segment.left[j].faction){
+						return true;
+					}
+				}
+			}else if(segment.left.length!=0){
+				var faction = segment.left[0].faction;
+				for(var j=1;j<segment.left.length;j++){
+					if(faction!=segment.left[j].faction){
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+		function skirmish(bothWays){
+			function casualties(a){
+				for(var i=0;i<a.length;i++){
+					if(a[i].health<=0){
+						a.splice(i--,1);
+					}
+				}
+			}
+			var segment = bothWays.left.concat(bothWays.right);
+			for(var i=0;i<segment.length;i++){
+				if(segment[i].health>0){
+					var victim = iRandom(segment.length);
+					if(segment[i].faction!=segment[victim].faction && segment[victim].health>0){
+						segment[i].fight(segment[victim]);
+					}
+				}
+			}
+			casualties(bothWays.left);
+			casualties(bothWays.right);
+		}
+		//right side
+		for(var i=this.segments.length-1;i>=0;i--){
+			if(checkSkirmish(this.segments[i])){
+				skirmish(this.segments[i]);
+				if(checkSkirmish(this.segments[i])){
+					continue;
+				}		
+			}
+			if(i==this.segments.length-1){				
+				while(this.segments[i].right.length>0){
+					var soldier = this.segments[i].right.pop();
+					this.node2.military[soldier.faction].push(soldier);
+				}
+			}else{				
+				while(this.segments[i].right.length>0){
+					var soldier = this.segments[i].right.pop();
+					this.segments[i+1].right.push(soldier);
+				}
+			}						
+		}
+		//left side
+		for(var i=0;i<this.segments.length;i++){
+			if(checkSkirmish(this.segments[i])){
+				skirmish(this.segments[i]);
+				if(checkSkirmish(this.segments[i])){
+					continue;
+				}
+			}				
+			if(i==0){				
+				while(this.segments[i].left.length>0){	
+					var soldier = this.segments[i].left.pop();
+					this.node1.military[soldier.faction].push(soldier);
+				}
+			}else{
+				while(this.segments[i].left.length>0){	
+					var soldier = this.segments[i].left.pop();
+					this.segments[i-1].left.push(soldier);
+				}
+			}					
+		}
+	}
+}</script>
+<script>
+function Soldier(faction){
+	this.faction=faction;
+	this.health=100;
+	this.missChance=0.1;
+	this.swing = function(){
+		if(Math.random<this.missChance){
+			return 0; // miss
+		}else
+			return iRandom(3)+2;
+	}
+	this.takeHit = function(hit){ // return true = died
+		this.health-=hit;
+		return this.health<=0;		
+	}
+	this.fight = function(enemy){ // return 1=won 0=draw -1=lose
+		var attack=this.swing();
+		var counterAttack=enemy.swing();
+		if(attack>counterAttack){
+			if(enemy.takeHit(attack))
+				return 1;
+			if(this.takeHit(counterAttack))
+				return -1;
+			return 0;
+		}else{			
+			if(this.takeHit(counterAttack))
+				return -1;
+			if(enemy.takeHit(attack))
+				return 1;
+			return 0;
+		}		
+	}
+}</script>
+<script>
+function err(){
+	alert('error');
+}
+function checkRoads(){
+	for(var i=0;i<connections.length;i++){
+		var road = connections[i];
+		if(road.other(road.node1)!=road.node2){
+			err();
+		}
+		if(road.other(road.node2)!=road.node1){
+			err();
+		}
+		if(road.node1.roads.indexOf(road)==-1){
+			err();
+		}
+		if(road.node2.roads.indexOf(road)==-1){
+			err();
+		}
+	}
+	console.log('Roads are fine');
+}
+function checkEntities(){
+	for(var i=0;i<entities.length;i++){
+		for(var j=0;j<entities[i].roads.length;j++){
+			var road = entities[i].roads[j];
+			var other = road.other(entities[i]);
+			for(var l=0;l<other.roads.length;l++){
+				
+			}				
+		}
+	}
+}
+function checkEntityIndexes(){
+	for(var i=0;i<entities.length;i++){
+		if(entities[i].index!==i || entities[i].index!==entities.indexOf(entities[i])){
+			console.log('Bad indexation on '+i+' entity');
+			return;
+		}
+	}
+	console.log('Entities are indexed correctly');
+} </script>
+<script>
+var bots=[];
+function worldOfAI(){
+	//create AI for every faction
+	for(var i=0;i<factions.length;i++){
+		if(i!=myFaction)
+			bots.push(new AI(i));
+	}
+}
+function AI(faction){
+	this.faction=faction;
+	this.turn = function(){
+		for(var i=0;i<entities.length;i++){
+			if(entities[i].faction==this.faction){
+				// AI can control this point
+				var e=entities[i];
+				var toEnemy=[];
+				for(var j=0;j<e.roads.length;j++){
+					if(e.roads[j].other(e).faction!=e.faction){
+						toEnemy.push(e.roads[j]);
+					}
+				}
+				if(toEnemy.length==0){
+					if(e.military[e.faction].length>10){
+						var selectedRoad=iRandom(e.roads.length);
+						sendSoldiers(e.roads[selectedRoad],e.roads[selectedRoad].other(e));
+					}
+				}else{
+					if(e.military[e.faction].length>50 || (counter<10000 && e.military[e.faction].length>3)){
+						var selectedRoad=iRandom(toEnemy.length);
+						sendSoldiers(toEnemy[selectedRoad],toEnemy[selectedRoad].other(e));						
+					}
+				}
+			}
+		}
+	}
+}</script>
+<script>
+var canvas = document.getElementById('canvas'),
+	ctx = canvas.getContext('2d'),
+	sx =  canvas.offsetLeft,
+	sy =  canvas.offsetTop+canvas.width;
+	
+var	entities,connections,factions,counter,current,myFaction;
+loadGame();
+beginGame();</script>
